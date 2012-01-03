@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 const api = "http://maps.googleapis.com/maps/api/geocode/json"
@@ -43,11 +44,7 @@ func (r *Request) Values() url.Values {
 	if r.Language != "" {
 		v.Set("language", r.Language)
 	}
-	if r.Sensor {
-		v.Set("sensor", "true")
-	} else {
-		v.Set("sensor", "false")
-	}
+	v.Set("sensor", strconv.FormatBool(r.Sensor))
 	return v
 }
 
