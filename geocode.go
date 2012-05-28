@@ -24,10 +24,15 @@ type Request struct {
 	Language string
 
 	Sensor bool
+
+	values url.Values
 }
 
 func (r *Request) Values() url.Values {
-	v := make(url.Values)
+	if r.values == nil {
+		r.values = make(url.Values)
+	}
+	var v = r.values
 	if r.Address != "" {
 		v.Set("address", r.Address)
 	} else if r.Location != nil {
