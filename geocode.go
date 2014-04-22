@@ -11,7 +11,7 @@ import (
 	"strconv"
 )
 
-const api = "http://maps.googleapis.com/maps/api/geocode/json"
+const api = "https://maps.googleapis.com/maps/api/geocode/json"
 
 type Request struct {
 	// One (and only one) of these must be set.
@@ -22,6 +22,7 @@ type Request struct {
 	Bounds   *Bounds // Lookup within this viewport.
 	Region   string
 	Language string
+	Key      string
 
 	Sensor bool
 
@@ -48,6 +49,9 @@ func (r *Request) Values() url.Values {
 	}
 	if r.Language != "" {
 		v.Set("language", r.Language)
+	}
+	if r.Key != "" {
+		v.Set("key", r.Key)
 	}
 	v.Set("sensor", strconv.FormatBool(r.Sensor))
 	return v
@@ -78,8 +82,9 @@ func (r *Request) Lookup(transport http.RoundTripper) (*Response, error) {
 }
 
 type Response struct {
-	Status  string
-	Results []*Result
+	Status       string
+	ErrorMessage string `json:"error_message"`
+	Results      []*Result
 }
 
 type Result struct {
