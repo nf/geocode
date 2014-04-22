@@ -11,6 +11,7 @@ For Google:
 	req := &geocode.Request{
 		Region:   "us",
 		Provider: geocode.GOOGLE,
+		Location: &geocode.Point{34.64973, -98.41503}
   }
 ```
 
@@ -19,12 +20,12 @@ For OSM:
 	req := &geocode.Request{
 		Provider: geocode.OSM,
 		Limit:    1,
+		Location: &geocode.Point{34.64973, -98.41503}
 	}
 ```
 
 Then:
 ```
-  req.Location = &geocode.Point{34.64973, -98.41503}
   resp, err := req.Lookup(nil)
   if err != nil {
 		//fmt.Printf("Lookup error: %v\n", err)
