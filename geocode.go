@@ -1,6 +1,7 @@
-// Package geocode is an interface to mapping (google or OSM) APIs.
+// Package geocode is an interface to mapping APIs. This includes geocoding as well as routing.
 //  == Google: http://code.google.com/apis/maps/documentation/geocoding/
 //  == OSM: http://wiki.openstreetmap.org/wiki/Nominatim
+//  == YOURS: http://wiki.openstreetmap.org/wiki/YOURS
 package geocode
 
 import (
@@ -11,16 +12,24 @@ import (
 	"strconv"
 )
 
-const GOOGLE = "http://maps.googleapis.com/maps/api/geocode/json"
-const OSM = "http://open.mapquestapi.com/nominatim/v1/reverse.php"
+type (
+	RequestType         int
+	ProviderApiLocation string
+)
 
-type Bounds struct {
-	NorthEast, SouthWest Point
-}
+const (
+	/* Request Type */
+	GEOCODE RequestType = 1
+	ROUTE   RequestType = 2
 
-func (b Bounds) String() string {
-	return fmt.Sprintf("%v|%v", b.NorthEast, b.SouthWest)
-}
+	/* Geocoding URLs */
+	GOOGLE = "http://maps.googleapis.com/maps/api/geocode/json"
+	OSM    = "http://open.mapquestapi.com/nominatim/v1/reverse.php"
+
+	/* Routing URLs */
+	YOURS        = "http://www.yournavigation.org/api/1.0/gosmore.php"
+	YOURS_HEADER = "github.com/talmai/geocode" // change this to your website!
+)
 
 type Point struct {
 	Lat, Lng float64
@@ -30,20 +39,29 @@ func (p Point) String() string {
 	return fmt.Sprintf("%g,%g", p.Lat, p.Lng)
 }
 
-type Request struct {
-	Provider string
+type Bounds struct {
+	NorthEast, SouthWest Point
+}
 
-	// One (and only one) of these must be set.
+func (b Bounds) String() string {
+	return fmt.Sprintf("%v|%v", b.NorthEast, b.SouthWest)
+}
+
+type Request struct {
+	Provider ProviderApiLocation
+	Type     RequestType
+
+	// For geocoding, one (and only one) of these must be set.
 	Address  string
 	Location *Point
 
-	// Optional fields.
-	Bounds   *Bounds // Lookup within this viewport.
-	Region   string
-	Language string
+	// For routing, bounds must be set
+	Bounds *Bounds // used by GOOGLE and YOURS
 
-	Sensor bool
-	Limit  int64
+	Limit    int64  // used by OSM
+	Region   string // used by GOOGLE
+	Language string // used by GOOGLE
+	Sensor   bool   // used by GOOGLE
 
 	values url.Values
 }
@@ -53,6 +71,7 @@ func (r *Request) Values() url.Values {
 		r.values = make(url.Values)
 	}
 	var v = r.values
+
 	if r.Address != "" {
 		switch r.Provider {
 		case GOOGLE:
@@ -69,13 +88,29 @@ func (r *Request) Values() url.Values {
 			v.Set("lon", fmt.Sprintf("%g", r.Location.Lng))
 		}
 	} else {
-		panic("neither Address nor Location set")
-	}
-	if r.Bounds != nil {
-		v.Set("bounds", r.Bounds.String())
+		if r.Type == GEOCODE {
+			panic("neither Address nor Location set")
+		}
 	}
 
-	if r.Provider == GOOGLE {
+	if r.Bounds != nil {
+		switch r.Provider {
+		case GOOGLE:
+			v.Set("bounds", r.Bounds.String())
+		case YOURS:
+			v.Set("flat", fmt.Sprintf("%g", r.Bounds.NorthEast.Lat))
+			v.Set("flon", fmt.Sprintf("%g", r.Bounds.NorthEast.Lng))
+			v.Set("tlat", fmt.Sprintf("%g", r.Bounds.SouthWest.Lat))
+			v.Set("tlon", fmt.Sprintf("%g", r.Bounds.SouthWest.Lng))
+		}
+	} else {
+		if r.Type == ROUTE {
+			panic("Start/End Bounds must be set for routing")
+		}
+	}
+
+	switch r.Provider {
+	case GOOGLE:
 		if r.Region != "" {
 			v.Set("region", r.Region)
 		}
@@ -83,51 +118,74 @@ func (r *Request) Values() url.Values {
 			v.Set("language", r.Language)
 		}
 		v.Set("sensor", strconv.FormatBool(r.Sensor))
-	} else {
+	case OSM:
 		v.Set("limit", strconv.FormatInt(r.Limit, 10))
 		v.Set("format", "json")
+	case YOURS:
+		v.Set("v", "motorcar")   // type of transport, possible options are: motorcar, bicycle or foot.
+		v.Set("fast", "1")       // selects the fastest route, 0 the shortest route.
+		v.Set("layer", "mapnik") // determines which Gosmore instance is used to calculate the route
+		//	Provide mapnik for normal routing using car, bicycle or foot
+		//	Provide cn for using bicycle routing using cycle route networks only.
+		v.Set("format", "geojson") // This can either be kml or geojson.
+		v.Set("geometry", "1")     // enables/disables adding the route geometry in the output.
+		v.Set("distance", "v")     // specifies which algorithm is used to calculate the route distance
+		//	Options are v for Vicenty, gc for simplified Great Circle, h for Haversine Law, cs for Cosine Law.
+		v.Set("instructions", "1") // enbles/disables adding driving instructions in the output.
+		v.Set("lang", "en_US")     // specifies the language code in which the routing directions are returned.
 	}
 
 	return v
 }
 
-// Lookup makes the Request to the Google Geocoding API servers using
-// the provided transport (or http.DefaultTransport if nil).
 func (r *Request) Lookup(transport http.RoundTripper) (*Response, error) {
+	r.Type = GEOCODE
+	return r.SendAPIRequest(transport)
+}
+
+func (r *Request) Route(transport http.RoundTripper) (*Response, error) {
+	r.Type = ROUTE
+	return r.SendAPIRequest(transport)
+}
+
+// SendAPIRequest makes the Request to the provider using
+// the provided transport (or http.DefaultTransport if nil).
+func (r *Request) SendAPIRequest(transport http.RoundTripper) (*Response, error) {
 	if r == nil {
 		panic("Lookup on nil *Request")
 	}
 
 	c := http.Client{Transport: transport}
 	u := fmt.Sprintf("%s?%s", r.Provider, r.Values().Encode())
-	getResp, err := c.Get(u)
+
+	req, err := http.NewRequest("GET", u, nil)
+	if r.Provider == YOURS {
+		req.Header.Add("X-Yours-client", YOURS_HEADER)
+	}
+	getResp, err := c.Do(req)
+	defer getResp.Body.Close()
+
 	if err != nil {
 		return nil, err
 	}
-	defer getResp.Body.Close()
 
 	resp := new(Response)
 	resp.QueryString = u
 
 	if getResp.StatusCode == 200 { // OK
-		decoder := json.NewDecoder(getResp.Body)
+		err = json.NewDecoder(getResp.Body).Decode(resp)
 		switch r.Provider {
 		case GOOGLE:
-			gResp := &GoogleResponse{Response: resp}
 			// reverse geocoding
-			err = decoder.Decode(gResp)
-			resp.Count = len(gResp.Results)
+			resp.Count = len(resp.GoogleResponse.Results)
 			if resp.Count >= 1 {
-				resp.Found = gResp.Results[0].Address
+				resp.Found = resp.GoogleResponse.Results[0].Address
 			}
 		case OSM:
-			oResp := &OSMResponse{Response: resp}
 			// reverse geocoding
-			err = decoder.Decode(oResp)
-			if oResp.Address != "" {
+			if resp.OSMResponse.Address != "" {
 				resp.Count = 1
-				resp.Found = oResp.AddressParts.Name
-				fmt.Println(u, oResp.Address)
+				resp.Found = resp.OSMResponse.AddressParts.Name
 			} else {
 				resp.Count = 0
 			}
@@ -151,10 +209,12 @@ type Response struct {
 	QueryString string
 	Found       string
 	Count       int
+	*GoogleResponse
+	*OSMResponse
+	*YOURSResponse
 }
 
 type GoogleResponse struct {
-	*Response
 	Results []*GoogleResult
 }
 
@@ -244,7 +304,6 @@ type Geometry struct {
 }
 
 type OSMResponse struct {
-	*Response
 	// OSM stuff
 	/*
 		{"place_id":"62762024",
@@ -278,4 +337,40 @@ type OSMAddressPart struct {
 	Name        string `json:"road"`
 	City        string `json:"city"`
 	State       string `json:"state"`
+}
+
+// currently doesn't
+type YOURSResponse struct {
+	/*
+		{
+		  "type": "LineString",
+		  "crs": {
+		    "type": "name",
+		    "properties": {
+		      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+		    }
+		  },
+		  "coordinates":
+		  [
+			[-118.604871, 34.172300]
+			,[-118.604872, 34.172078]
+			,[-118.604870, 34.171966]
+			,[-118.500806, 34.235753]
+			,[-118.500814, 34.236146]
+		  ],
+		  "properties": {
+		    "distance": "17.970238",
+		    "description": "Go straight ahead.<br>Follow the road for...",
+		    "traveltime": "1018"
+		    }
+		}
+	*/
+	Coordinates [][]float64      `json:"coordinates"`
+	Properties  *YOURSProperties `json:"properties"`
+}
+
+type YOURSProperties struct {
+	Distance     string `json:"distance"`
+	Instructions string `json:"description"`
+	TravelTime   string `json:"traveltime"`
 }
