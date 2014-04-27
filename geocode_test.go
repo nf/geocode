@@ -4,7 +4,8 @@ import "testing"
 
 func TestLookup(t *testing.T) {
 	req := &Request{
-		Address: "New York City",
+		Address:  "New York City",
+		Provider: GOOGLE,
 	}
 	resp, err := req.Lookup(nil)
 	if err != nil {
@@ -17,14 +18,15 @@ func TestLookup(t *testing.T) {
 		t.Fatalf("len(Results) == %d, want 1", l)
 	}
 	addr := "New York, NY, USA"
-	if a := resp.Results[0].Address; a != addr {
+	if a := resp.Found; a != addr {
 		t.Errorf("Address == %q, want %q", a, addr)
 	}
 }
 
 func TestLookupWithBounds(t *testing.T) {
 	req := &Request{
-		Address: "Winnetka",
+		Address:  "Winnetka",
+		Provider: GOOGLE,
 	}
 	bounds := &Bounds{Point{34.172684, -118.604794},
 		Point{34.236144, -118.500938}}
@@ -40,14 +42,15 @@ func TestLookupWithBounds(t *testing.T) {
 		t.Fatalf("len(Results) == %d, want 1", l)
 	}
 	addr := "Winnetka, Los Angeles, CA, USA"
-	if a := resp.Results[0].Address; a != addr {
+	if a := resp.Found; a != addr {
 		t.Errorf("Address == %q, want %q", a, addr)
 	}
 }
 
 func TestLookupWithLanguage(t *testing.T) {
 	req := &Request{
-		Address: "札幌市",
+		Address:  "札幌市",
+		Provider: GOOGLE,
 	}
 	req.Language = "ja"
 	resp, err := req.Lookup(nil)
@@ -61,14 +64,15 @@ func TestLookupWithLanguage(t *testing.T) {
 		t.Fatalf("len(Results) == %d, want 1", l)
 	}
 	addr := "日本, 北海道札幌市"
-	if a := resp.Results[0].Address; a != addr {
+	if a := resp.Found; a != addr {
 		t.Errorf("Address == %q, want %q", a, addr)
 	}
 }
 
 func TestLookupWithRegion(t *testing.T) {
 	req := &Request{
-		Address: "Toledo",
+		Address:  "Toledo",
+		Provider: GOOGLE,
 	}
 	req.Region = "es"
 	resp, err := req.Lookup(nil)
@@ -82,7 +86,7 @@ func TestLookupWithRegion(t *testing.T) {
 		t.Fatalf("len(Results) == %d, want 1", l)
 	}
 	addr := "Toledo, Spain"
-	if a := resp.Results[0].Address; a != addr {
+	if a := resp.Found; a != addr {
 		t.Errorf("Address == %q, want %q", a, addr)
 	}
 }
