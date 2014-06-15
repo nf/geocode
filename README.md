@@ -68,3 +68,19 @@ Then:
     }
   }
 ```
+
+If using Google App Engine, you'll need to set the geocode request's HTTPClient:
+
+```
+	import (
+		"appengine"
+		"appengine/urlfetch"
+	)
+
+	c := appengine.NewContext(req)
+
+	geoReq := &geocode.Request{
+		HTTPClient: urlfetch.Client(c),
+		// ...
+	}
+```
