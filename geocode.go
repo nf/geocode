@@ -48,8 +48,9 @@ func (b Bounds) String() string {
 }
 
 type Request struct {
-	Provider ProviderApiLocation
-	Type     RequestType
+	HTTPClient *http.Client
+	Provider   ProviderApiLocation
+	Type       RequestType
 
 	// For geocoding, one (and only one) of these must be set.
 	Address  string
@@ -155,7 +156,10 @@ func (r *Request) SendAPIRequest(transport http.RoundTripper) (*Response, error)
 		panic("Lookup on nil *Request")
 	}
 
-	c := http.Client{Transport: transport}
+	c := r.HTTPClient
+	if c == nil {
+		c = &http.Client{Transport: transport}
+	}
 	u := fmt.Sprintf("%s?%s", r.Provider, r.Values().Encode())
 
 	req, err := http.NewRequest("GET", u, nil)
@@ -163,11 +167,10 @@ func (r *Request) SendAPIRequest(transport http.RoundTripper) (*Response, error)
 		req.Header.Add("X-Yours-client", YOURS_HEADER)
 	}
 	getResp, err := c.Do(req)
-	defer getResp.Body.Close()
-
 	if err != nil {
 		return nil, err
 	}
+	defer getResp.Body.Close()
 
 	resp := new(Response)
 	resp.QueryString = u
