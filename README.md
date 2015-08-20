@@ -12,7 +12,7 @@ For Google's GEOCODING:
 	req := &geocode.Request{
 		Region:   "us",
 		Provider: geocode.GOOGLE,
-		Location: &geocode.Point{34.64973, -98.41503}
+		Location: &geocode.Point{34.64973, -98.41503},
   }
 ```
 
@@ -21,7 +21,7 @@ For OSM GEOCODING:
 	req := &geocode.Request{
 		Provider: geocode.OSM,
 		Limit:    1,
-		Location: &geocode.Point{34.64973, -98.41503}
+		Location: &geocode.Point{34.64973, -98.41503},
 	}
 ```
 
@@ -48,7 +48,7 @@ For YOURS ROUTING:
 	req := &geocode.Request{
 		Provider: geocode.YOURS,
 		Bounds: &geocode.Bounds{geocode.Point{34.172684, -118.604794},
-			geocode.Point{34.236144, -118.500938}}
+			geocode.Point{34.236144, -118.500938}},
 	}
 ```
 
