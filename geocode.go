@@ -218,7 +218,8 @@ type Response struct {
 }
 
 type GoogleResponse struct {
-	Results []*GoogleResult
+	Results      []*GoogleResult
+	ErrorMessage string `json:"error_message"`
 }
 
 type GoogleResult struct {
