@@ -23,7 +23,7 @@ const (
 	ROUTE   RequestType = 2
 
 	/* Geocoding URLs */
-	GOOGLE = "http://maps.googleapis.com/maps/api/geocode/json"
+	GOOGLE = "https://maps.googleapis.com/maps/api/geocode/json"
 	OSM    = "http://open.mapquestapi.com/nominatim/v1/reverse.php"
 
 	/* Routing URLs */
@@ -63,6 +63,7 @@ type Request struct {
 	Region   string // used by GOOGLE
 	Language string // used by GOOGLE
 	Sensor   bool   // used by GOOGLE
+	ApiKey   string // used by GOOGLE
 
 	values url.Values
 }
@@ -117,6 +118,9 @@ func (r *Request) Values() url.Values {
 		}
 		if r.Language != "" {
 			v.Set("language", r.Language)
+		}
+		if r.ApiKey != "" {
+			v.Set("key", r.ApiKey)
 		}
 		v.Set("sensor", strconv.FormatBool(r.Sensor))
 	case OSM:
@@ -218,7 +222,8 @@ type Response struct {
 }
 
 type GoogleResponse struct {
-	Results []*GoogleResult
+	Results      []*GoogleResult
+	ErrorMessage string `json:"error_message"`
 }
 
 type GoogleResult struct {
