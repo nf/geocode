@@ -1,6 +1,6 @@
 // Package geocode is an interface to mapping APIs. This includes geocoding as well as routing.
 //  == Google: http://code.google.com/apis/maps/documentation/geocoding/
-//  == OSM: http://wiki.openstreetmap.org/wiki/Nominatim
+//  == OSM/MAPQUEST: http://open.mapquestapi.com/geocoding
 //  == YOURS: http://wiki.openstreetmap.org/wiki/YOURS
 package geocode
 
@@ -23,8 +23,8 @@ const (
 	ROUTE   RequestType = 2
 
 	/* Geocoding URLs */
-	GOOGLE = "http://maps.googleapis.com/maps/api/geocode/json"
-	OSM    = "http://open.mapquestapi.com/nominatim/v1/reverse.php"
+	GOOGLE = "https://maps.googleapis.com/maps/api/geocode/json"
+	OSM    = "http://open.mapquestapi.com/geocoding/v1/reverse"
 
 	/* Routing URLs */
 	YOURS        = "http://www.yournavigation.org/api/1.0/gosmore.php"
@@ -60,6 +60,7 @@ type Request struct {
 	Bounds *Bounds // used by GOOGLE and YOURS
 
 	Limit    int64  // used by OSM
+	Key      string // used by OSM and GOOGLE
 	Region   string // used by GOOGLE
 	Language string // used by GOOGLE
 	Sensor   bool   // used by GOOGLE
@@ -85,8 +86,7 @@ func (r *Request) Values() url.Values {
 		case GOOGLE:
 			v.Set("latlng", r.Location.String())
 		case OSM:
-			v.Set("lat", fmt.Sprintf("%g", r.Location.Lat))
-			v.Set("lon", fmt.Sprintf("%g", r.Location.Lng))
+			v.Set("location", r.Location.String())
 		}
 	} else {
 		if r.Type == GEOCODE {
@@ -119,9 +119,11 @@ func (r *Request) Values() url.Values {
 			v.Set("language", r.Language)
 		}
 		v.Set("sensor", strconv.FormatBool(r.Sensor))
+		v.Set("key", r.Key)
 	case OSM:
 		v.Set("limit", strconv.FormatInt(r.Limit, 10))
 		v.Set("format", "json")
+		v.Set("key", r.Key)
 	case YOURS:
 		v.Set("v", "motorcar")   // type of transport, possible options are: motorcar, bicycle or foot.
 		v.Set("fast", "1")       // selects the fastest route, 0 the shortest route.
@@ -176,21 +178,26 @@ func (r *Request) SendAPIRequest(transport http.RoundTripper) (*Response, error)
 	resp.QueryString = u
 
 	if getResp.StatusCode == 200 { // OK
-		err = json.NewDecoder(getResp.Body).Decode(resp)
 		switch r.Provider {
 		case GOOGLE:
 			// reverse geocoding
-			resp.Count = len(resp.GoogleResponse.Results)
-			if resp.Count >= 1 {
+			respG := new(GoogleResponse)
+			err = json.NewDecoder(getResp.Body).Decode(respG)
+			// fmt.Printf("----> GOOGLE response is: %s %v\n", respG, err)
+			resp.GoogleResponse = respG
+			if resp.GoogleResponse.Status == "OK" {
 				resp.Found = resp.GoogleResponse.Results[0].Address
 			}
 		case OSM:
 			// reverse geocoding
-			if resp.OSMResponse.Address != "" {
-				resp.Count = 1
-				resp.Found = resp.OSMResponse.AddressParts.Name
-			} else {
-				resp.Count = 0
+			respO := new(OSMResponse)
+			err = json.NewDecoder(getResp.Body).Decode(respO)
+			// fmt.Printf("----> OSM response is: %s %d \n", respO, len(respO.Results))
+			resp.OSMResponse = respO
+			resp.Count = 0
+			if err == nil {
+				resp.Count = len(resp.OSMResponse.Results[0].Locations[0].Street)
+				resp.Found = resp.OSMResponse.Results[0].Locations[0].Street + ", " + resp.OSMResponse.Results[0].Locations[0].Neighborhood + ", " + resp.OSMResponse.Results[0].Locations[0].City
 			}
 			// geocoding
 			// bodyBytes, _ := ioutil.ReadAll(getResp.Body)
@@ -200,11 +207,12 @@ func (r *Request) SendAPIRequest(transport http.RoundTripper) (*Response, error)
 	}
 
 	if err != nil {
-		return nil, err
+		resp.Status = "NOK"
+	} else {
+		resp.Status = "OK"
 	}
 
-	resp.Status = "OK"
-	return resp, nil
+	return resp, err
 }
 
 type Response struct {
@@ -219,6 +227,7 @@ type Response struct {
 
 type GoogleResponse struct {
 	Results []*GoogleResult
+	Status  string
 }
 
 type GoogleResult struct {
@@ -309,40 +318,79 @@ type Geometry struct {
 type OSMResponse struct {
 	// OSM stuff
 	/*
-		{"place_id":"62762024",
-		"licence":"Data \u00a9 OpenStreetMap contributors, ODbL 1.0. http:\/\/www.openstreetmap.org\/copyright",
-		"osm_type":"way",
-		"osm_id":"90394420",
-		"lat":"52.548781",
-		"lon":"-1.81626870827795",
-		"display_name":"137, Pilkington Avenue, Castle Vale, Birmingham, West Midlands, England, B72 1LH, United Kingdom",
-		"address":{
-			"house_number":"137",
-			"road":"Pilkington Avenue",
-			"suburb":"Castle Vale",
-			"city":"Birmingham",
-			"county":"West Midlands",
-			"state_district":"West Midlands",
-			"state":"England",
-			"postcode":"B72 1LH",
-			"country":"United Kingdom",
-			"country_code":"gb"
-		}}
+		{
+			"info":{
+				"statuscode":0,
+				"copyright":{
+					"text":"\u00A9 2016 MapQuest, Inc.",
+					"imageUrl":"http://api.mqcdn.com/res/mqlogo.gif",
+					"imageAltText":"\u00A9 2016 MapQuest, Inc."
+				},
+				"messages":[]
+			},
+			"options":{
+				"maxResults":1,
+				"thumbMaps":true,
+				"ignoreLatLngInput":false
+			},
+			"results":[
+				{
+				"providedLocation":{
+					"latLng":{
+						"lat":-34.6536430238521,
+						"lng":-58.481131977625
+					}
+				},
+				"locations":[
+					{
+					"street":"Av. Olivera",
+					"adminArea6":"Parque Avellaneda",
+					"adminArea6Type":"Neighborhood",
+					"adminArea5":"Autonomous City of Buenos Aires",
+					"adminArea5Type":"City",
+					"adminArea4":"",
+					"adminArea4Type":"County",
+					"adminArea3":"Autonomous City of Buenos Aires",
+					"adminArea3Type":"State",
+					"adminArea1":"AR",
+					"adminArea1Type":"Country",
+					"postalCode":"C1407GZX",
+					"geocodeQualityCode":"B1AAA",
+					"geocodeQuality":"STREET",
+					"dragPoint":false,
+					"sideOfStreet":"N",
+					"linkId":"0",
+					"unknownInput":"",
+					"type":"s",
+					"latLng":{
+						"lat":-34.653516,
+						"lng":-58.481153
+					},
+					"displayLatLng":{
+						"lat":-34.653516,
+						"lng":-58.481153
+					},
+					"mapUrl":"http://open.mapquestapi.com/staticmap/v4/getmap?key=blahblah&type=map&size=225,160&pois=purple-1,-34.6535164,-58.4811532,0,0,|&center=-34.6535164,-58.4811532&zoom=15&rand=-113083566"
+				}]
+			}]
+		}
 	*/
-	Address      string          `json:"display_name"`
-	AddressParts *OSMAddressPart `json:"address"`
-	Lat          string          `json:"lat"`
-	Lng          string          `json:"lon"`
+	Results []OSMLocations `json:"results"`
 }
 
-type OSMAddressPart struct {
-	HouseNumber string `json:"house_number"`
-	Name        string `json:"road"`
-	City        string `json:"city"`
-	State       string `json:"state"`
+type OSMLocations struct {
+	Locations []OSMAdress `json:"locations"`
 }
 
-// currently doesn't
+type OSMAdress struct {
+	Street       string `json:"street"`
+	AdminArea1   string `json:"adminArea1"`
+	AdminArea3   string `json:"adminArea3"`
+	AdminArea4   string `json:"adminArea4"`
+	City         string `json:"adminArea5"`
+	Neighborhood string `json:"adminArea6"`
+}
+
 type YOURSResponse struct {
 	/*
 		{
