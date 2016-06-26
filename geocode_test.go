@@ -2,6 +2,11 @@ package geocode
 
 import "testing"
 
+func TestMoved(t *testing.T) {
+	t.Log(msg)
+	t.Fail()
+}
+
 func TestLookup(t *testing.T) {
 	req := &Request{
 		Address:  "New York City",

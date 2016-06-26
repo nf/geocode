@@ -1,7 +1,4 @@
-// Package geocode is an interface to mapping APIs. This includes geocoding as well as routing.
-//  == Google: http://code.google.com/apis/maps/documentation/geocoding/
-//  == OSM: http://wiki.openstreetmap.org/wiki/Nominatim
-//  == YOURS: http://wiki.openstreetmap.org/wiki/YOURS
+// Package geocode has moved to "github.com/talmai/geocode".
 package geocode
 
 import (
@@ -9,8 +6,20 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 )
+
+const msg = `
+***
+Package geocode has moved to "github.com/talmai/geocode".
+The program's author should update it to use the package from its new location.
+***
+`
+
+func init() {
+	fmt.Fprint(os.Stderr, msg)
+}
 
 type (
 	RequestType         int
