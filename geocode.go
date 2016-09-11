@@ -65,6 +65,9 @@ type Request struct {
 	Address  string
 	Location *Point
 
+	// Api key
+	ApiKey string
+
 	// For routing, bounds must be set
 	Bounds *Bounds // used by GOOGLE and YOURS
 
@@ -126,6 +129,9 @@ func (r *Request) Values() url.Values {
 		}
 		if r.Language != "" {
 			v.Set("language", r.Language)
+		}
+		if r.ApiKey != "" {
+			v.Set("key", r.ApiKey)
 		}
 		v.Set("sensor", strconv.FormatBool(r.Sensor))
 	case OSM:
@@ -212,7 +218,6 @@ func (r *Request) SendAPIRequest(transport http.RoundTripper) (*Response, error)
 		return nil, err
 	}
 
-	resp.Status = "OK"
 	return resp, nil
 }
 
